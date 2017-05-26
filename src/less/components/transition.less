@@ -39,19 +39,18 @@
  ========================================================================== */
 
 /*
- * 1. Switches on the hardware compositing mode from the beginning to assure a smooth transition when hovering.
- *
+ * Using multiple selectors to exclude `uk-transition-toggle`
  * Note: Transitions don't work with `uk-postion-center-*` classes because they also use `transform`
  *       Just put the transition in an extra `div`
  */
 
-[class*='uk-transition-'] {
-    transition-duration: @transition-duration;
-    transition-timing-function: ease-out;
+.uk-transition-fade,
+[class*='uk-transition-scale'],
+[class*='uk-transition-slide'] {
+    -webkit-transition: @transition-duration ease-out;
+    transition: @transition-duration ease-out;
+    -webkit-transition-property: opacity, transform, filter;
     transition-property: opacity, transform, filter;
-    /* 1 */
-    -webkit-transform: translateZ(0);
-    transform: translateZ(0);
 }
 
 /*

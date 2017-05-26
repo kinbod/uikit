@@ -1,36 +1,21 @@
-import { $, doc, isWithin, toJQuery, transitionend } from '../util/index';
+import UIkit from '../api/index';
+import { $, doc, docElement, isWithin, promise, requestAnimationFrame, toNode, toJQuery, toMs, transitionend } from '../util/index';
 import Class from './class';
-import Toggable from './toggable';
+import Togglable from './togglable';
 
 var active;
 
-doc.on({
-
-    click(e) {
-        if (active && active.bgClose && !e.isDefaultPrevented() && !isWithin(e.target, active.panel)) {
-            active.hide();
-        }
-    },
-
-    keydown(e) {
-        if (e.keyCode === 27 && active && active.escClose) {
-            e.preventDefault();
-            active.hide();
-        }
-    }
-
-});
-
 export default {
 
-    mixins: [Class, Toggable],
+    mixins: [Class, Togglable],
 
     props: {
         clsPanel: String,
         selClose: String,
         escClose: Boolean,
         bgClose: Boolean,
-        stack: Boolean
+        stack: Boolean,
+        container: Boolean
     },
 
     defaults: {
@@ -38,156 +23,212 @@ export default {
         escClose: true,
         bgClose: true,
         overlay: true,
-        stack: false
+        stack: false,
+        container: true
     },
 
-    ready() {
+    computed: {
 
-        this.page = $(document.documentElement);
-        this.body = $(document.body);
-        this.panel = toJQuery(`.${this.clsPanel}`, this.$el);
-
-        this.$el.on('click', this.selClose, e => {
-            e.preventDefault();
-            this.hide();
-        });
-
-    },
-
-    events: {
-
-        toggle(e) {
-            e.preventDefault();
-            this.toggleNow(this.$el);
+        body() {
+            return $(document.body);
         },
 
-        beforeshow(e) {
-
-            if (!this.$el.is(e.target)) {
-                return;
-            }
-
-            if (this.isActive()) {
-                return false;
-            }
-
-            var prev = active && active !== this && active;
-
-            if (!active) {
-                this.body.css('overflow-y', this.getScrollbarWidth() && this.overlay ? 'scroll' : '');
-            }
-
-            active = this;
-
-            if (prev) {
-                if (this.stack) {
-                    this.prev = prev;
-                } else {
-                    prev.hide();
-                }
-            }
-
-            this.panel.one(transitionend, () => {
-                var event = $.Event('show');
-                event.isShown = true;
-                this.$el.trigger(event, [this]);
-            });
-
+        panel() {
+            return this.$el.find(`.${this.clsPanel}`);
         },
 
-        show(e) {
-
-            if (!this.$el.is(e.target)) {
-                return;
-            }
-
-            if (!e.isShown) {
-                e.stopImmediatePropagation();
-            }
-
+        container() {
+            var container = this.$props.container === true && UIkit.container || this.$props.container && toJQuery(this.$props.container);
+            return container && toNode(container);
         },
 
-        beforehide(e) {
-
-            if (!this.$el.is(e.target)) {
-                return;
-            }
-
-            active = active && active !== this && active || this.prev;
-
-            var hide = () => {
-                var event = $.Event('hide');
-                event.isHidden = true;
-                this.$el.trigger(event, [this]);
-            };
-
-            if (parseFloat(this.panel.css('transition-duration'))) {
-                this.panel.one(transitionend, hide);
-            } else {
-                hide();
-            }
+        transitionElement() {
+            return this.panel;
         },
 
-        hide(e) {
-
-            if (!this.$el.is(e.target)) {
-                return;
-            }
-
-            if (!e.isHidden) {
-                e.stopImmediatePropagation();
-                return;
-            }
-
-            if (!active) {
-                this.body.css('overflow-y', '');
-            }
-
+        transitionDuration() {
+            return toMs(this.transitionElement.css('transition-duration'));
         }
 
     },
 
-    methods: {
+    events: [
 
-        isActive() {
-            return this.$el.hasClass(this.cls);
+        {
+
+            name: 'click',
+
+            delegate() {
+                return this.selClose;
+            },
+
+            handler(e) {
+                e.preventDefault();
+                this.hide();
+            }
+
         },
 
+        {
+
+            name: 'toggle',
+
+            handler(e) {
+                e.preventDefault();
+                this.toggle();
+            }
+
+        },
+
+        {
+
+            name: 'beforeshow',
+
+            self: true,
+
+            handler() {
+
+                if (this.isToggled()) {
+                    return false;
+                }
+
+                var prev = active && active !== this && active;
+
+                active = this;
+
+                if (prev) {
+                    if (this.stack) {
+                        this.prev = prev;
+                    } else {
+                        prev.hide().then(this.show);
+                        return false;
+                    }
+                } else {
+                    requestAnimationFrame(() => register(this.$options.name));
+                }
+
+                if (!prev) {
+                    this.scrollbarWidth = window.innerWidth - docElement[0].offsetWidth;
+                    this.body.css('overflow-y', this.scrollbarWidth && this.overlay ? 'scroll' : '');
+                }
+
+                docElement.addClass(this.clsPage);
+
+            }
+
+        },
+
+        {
+
+            name: 'beforehide',
+
+            self: true,
+
+            handler() {
+
+                if (!this.isToggled()) {
+                    return false;
+                }
+
+                active = active && active !== this && active || this.prev;
+
+                if (!active) {
+                    deregister(this.$options.name);
+                }
+
+            }
+
+        },
+
+        {
+
+            name: 'hidden',
+
+            self: true,
+
+            handler() {
+                if (!active) {
+                    docElement.removeClass(this.clsPage);
+                    this.body.css('overflow-y', '');
+                }
+            }
+
+        }
+
+    ],
+
+    methods: {
+
         toggle() {
-            return this.isActive() ? this.hide() : this.show();
+            return this.isToggled() ? this.hide() : this.show();
         },
 
         show() {
-            var deferred = $.Deferred();
-            this.$el.one('show', () => deferred.resolve());
-            this.toggleNow(this.$el, true);
-            return deferred.promise();
+            if (this.container && !this.$el.parent().is(this.container)) {
+                this.container.appendChild(this.$el[0]);
+                return promise(resolve =>
+                    requestAnimationFrame(() =>
+                        resolve(this.show())
+                    )
+                )
+            }
+
+            return this.toggleNow(this.$el, true);
         },
 
         hide() {
-            var deferred = $.Deferred();
-            this.$el.one('hide', () => deferred.resolve());
-            this.toggleNow(this.$el, false);
-            return deferred.promise();
+            return this.toggleNow(this.$el, false);
         },
 
         getActive() {
             return active;
         },
 
-        getScrollbarWidth() {
-            var width = this.page[0].style.width;
+        _toggleImmediate(el, show) {
+            this._toggle(el, show);
 
-            this.page.css('width', '');
+            return this.transitionDuration ? promise((resolve, reject) => {
 
-            var scrollbarWidth = window.innerWidth - this.page.outerWidth(true);
+                if (this._transition) {
+                    this.transitionElement.off(transitionend, this._transition.handler);
+                    this._transition.reject();
+                }
 
-            if (width) {
-                this.page.width(width);
-            }
+                this._transition = {
+                    reject,
+                    handler: () => {
+                        resolve();
+                        this._transition = null;
+                    }
+                };
 
-            return scrollbarWidth;
-        }
+                this.transitionElement.one(transitionend, this._transition.handler);
+
+            }) : promise.resolve();
+        },
     }
 
+}
+
+function register(name) {
+    doc.on({
+
+        [`click.${name}`](e) {
+            if (active && active.bgClose && !e.isDefaultPrevented() && !isWithin(e.target, active.panel)) {
+                active.hide();
+            }
+        },
+
+        [`keydown.${name}`](e) {
+            if (e.keyCode === 27 && active && active.escClose) {
+                e.preventDefault();
+                active.hide();
+            }
+        }
+
+    });
+}
+
+function deregister(name) {
+    doc.off(`click.${name}`).off(`keydown.${name}`);
 }

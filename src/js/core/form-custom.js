@@ -17,34 +17,57 @@ export default function (UIkit) {
             target: false
         },
 
-        ready() {
-            this.input = this.$el.find(':input:first');
-            this.target = this.target && query(this.target === true ? '> :input:first + :first' : this.target, this.$el);
+        computed: {
 
-            var state = this.input.next();
-            this.input.on({
-                focus: e => state.addClass('uk-focus'),
-                blur: e => state.removeClass('uk-focus'),
-                mouseenter: e => state.addClass('uk-hover'),
-                mouseleave: e => state.removeClass('uk-hover')
-            });
+            input() {
+                return this.$el.find(':input:first');
+            },
 
+            state() {
+                return this.input.next();
+            },
+
+            target() {
+                return this.$props.target && query(this.$props.target === true ? '> :input:first + :first' : this.$props.target, this.$el)
+            }
+
+        },
+
+        connected() {
             this.input.trigger('change');
         },
 
-        events: {
+        events: [
 
-            change() {
-                this.target && this.target[this.target.is(':input') ? 'val' : 'text'](
-                    this.input[0].files && this.input[0].files[0]
-                        ? this.input[0].files[0].name
-                        : this.input.is('select')
-                            ? this.input.find('option:selected').text()
-                            : this.input.val()
-                );
+            {
+
+                name: 'focusin focusout mouseenter mouseleave',
+
+                delegate: ':input:first',
+
+                handler({type}) {
+                    this.state.toggleClass(`uk-${~type.indexOf('focus') ? 'focus' : 'hover'}`, ~['focusin', 'mouseenter'].indexOf(type));
+                }
+
+            },
+
+            {
+
+                name: 'change',
+
+                handler() {
+                    this.target && this.target[this.target.is(':input') ? 'val' : 'text'](
+                        this.input[0].files && this.input[0].files[0]
+                            ? this.input[0].files[0].name
+                            : this.input.is('select')
+                                ? this.input.find('option:selected').text()
+                                : this.input.val()
+                    );
+                }
+
             }
 
-        }
+        ]
 
     });
 

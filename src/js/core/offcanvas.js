@@ -1,5 +1,7 @@
 import { Modal } from '../mixin/index';
-import { transitionend } from '../util/index';
+import { $, docElement, isTouch, query, transitionend } from '../util/index';
+
+var scroll;
 
 export default function (UIkit) {
 
@@ -10,39 +12,57 @@ export default function (UIkit) {
         args: 'mode',
 
         props: {
+            content: String,
             mode: String,
             flip: Boolean,
             overlay: Boolean
         },
 
         defaults: {
+            content: '.uk-offcanvas-content:first',
             mode: 'slide',
             flip: false,
             overlay: false,
             clsPage: 'uk-offcanvas-page',
+            clsContainer: 'uk-offcanvas-container',
             clsPanel: 'uk-offcanvas-bar',
             clsFlip: 'uk-offcanvas-flip',
-            clsPageAnimation: 'uk-offcanvas-page-animation',
+            clsContent: 'uk-offcanvas-content',
+            clsContentAnimation: 'uk-offcanvas-content-animation',
             clsSidebarAnimation: 'uk-offcanvas-bar-animation',
             clsMode: 'uk-offcanvas',
             clsOverlay: 'uk-offcanvas-overlay',
-            clsPageOverlay: 'uk-offcanvas-page-overlay',
             selClose: '.uk-offcanvas-close'
         },
 
-        init() {
+        computed: {
 
-            this.clsFlip = this.flip ? this.clsFlip : '';
-            this.clsOverlay = this.overlay ? this.clsOverlay : '';
-            this.clsPageOverlay = this.overlay ? this.clsPageOverlay : '';
-            this.clsMode = `${this.clsMode}-${this.mode}`;
+            content() {
+                return $(query(this.$props.content, this.$el));
+            },
 
-            if (this.mode === 'none' || this.mode === 'reveal') {
-                this.clsSidebarAnimation = '';
-            }
+            clsFlip() {
+                return this.flip ? this.$props.clsFlip : '';
+            },
 
-            if (this.mode !== 'push' && this.mode !== 'reveal') {
-                this.clsPageAnimation = '';
+            clsOverlay() {
+                return this.overlay ? this.$props.clsOverlay : '';
+            },
+
+            clsMode() {
+                return `${this.$props.clsMode}-${this.mode}`;
+            },
+
+            clsSidebarAnimation() {
+                return this.mode === 'none' || this.mode === 'reveal' ? '' : this.$props.clsSidebarAnimation;
+            },
+
+            clsContentAnimation() {
+                return this.mode !== 'push' && this.mode !== 'reveal' ? '' : this.$props.clsContentAnimation
+            },
+
+            transitionElement() {
+                return this.mode === 'reveal' ? this.panel.parent() : this.panel;
             }
 
         },
@@ -51,56 +71,107 @@ export default function (UIkit) {
 
             write() {
 
-                if (this.isActive()) {
-                    this.page.width(window.innerWidth - this.getScrollbarWidth());
+                if (this.isToggled()) {
+
+                    if (this.overlay || this.clsContentAnimation) {
+                        this.content.width(window.innerWidth - this.scrollbarWidth);
+                    }
+
+                    if (this.overlay) {
+                        this.content.height(window.innerHeight);
+                        scroll && this.content.scrollTop(scroll.y);
+                    }
+
+
                 }
 
             },
 
-            events: ['resize', 'orientationchange']
+            events: ['resize']
 
         },
 
-        events: {
+        events: [
 
-            beforeshow(e) {
+            {
+                name: 'beforeshow',
 
-                if (!this.$el.is(e.target)) {
-                    return;
+                self: true,
+
+                handler() {
+
+                    scroll = scroll || {x: window.pageXOffset, y: window.pageYOffset};
+
+                    if (this.mode === 'reveal' && !this.panel.parent().hasClass(this.clsMode)) {
+                        this.panel.wrap('<div>').parent().addClass(this.clsMode);
+                    }
+
+                    docElement.css('overflow-y', (!this.clsContentAnimation || this.flip) && this.scrollbarWidth && this.overlay ? 'scroll' : '');
+
+                    this.body.addClass(`${this.clsContainer} ${this.clsFlip} ${this.clsOverlay}`).height();
+                    this.content.addClass(this.clsContentAnimation);
+                    this.panel.addClass(`${this.clsSidebarAnimation} ${this.mode !== 'reveal' ? this.clsMode : ''}`);
+                    this.$el.addClass(this.clsOverlay).css('display', 'block').height();
+
                 }
-
-                this.page.addClass(`${this.clsPage} ${this.clsFlip} ${this.clsPageAnimation} ${this.clsPageOverlay}`);
-                this.panel.addClass(`${this.clsSidebarAnimation} ${this.clsMode}`);
-                this.$el.addClass(this.clsOverlay).css('display', 'block').height();
-
             },
 
-            beforehide(e) {
+            {
+                name: 'beforehide',
 
-                if (!this.$el.is(e.target)) {
-                    return;
+                self: true,
+
+                handler() {
+                    this.content.removeClass(this.clsContentAnimation);
+
+                    if (this.mode === 'none' || this.getActive() && this.getActive() !== this) {
+                        this.panel.trigger(transitionend);
+                    }
                 }
-
-                this.page.removeClass(this.clsPageAnimation).css('margin-left', '');
-
-                if (this.mode === 'none' || this.getActive() && this.getActive() !== this) {
-                    this.panel.trigger(transitionend);
-                }
-
             },
 
-            hide(e) {
+            {
+                name: 'hidden',
 
-                if (!this.$el.is(e.target)) {
-                    return;
+                self: true,
+
+                handler() {
+
+                    if (this.mode === 'reveal') {
+                        this.panel.unwrap();
+                    }
+
+                    if (!this.overlay) {
+                        scroll = {x: window.pageXOffset, y: window.pageYOffset}
+                    }
+
+                    this.panel.removeClass(`${this.clsSidebarAnimation} ${this.clsMode}`);
+                    this.$el.removeClass(this.clsOverlay).css('display', '');
+                    this.body.removeClass(`${this.clsContainer} ${this.clsFlip} ${this.clsOverlay}`).scrollTop(scroll.y);
+
+                    docElement.css('overflow-y', '');
+                    this.content.width('').height('');
+
+                    window.scrollTo(scroll.x, scroll.y);
+
+                    scroll = null;
+
                 }
+            },
 
-                this.page.removeClass(`${this.clsPage} ${this.clsFlip} ${this.clsPageOverlay}`).width('');
-                this.panel.removeClass(`${this.clsSidebarAnimation} ${this.clsMode}`);
-                this.$el.removeClass(this.clsOverlay).css('display', '');
+            {
+                name: 'swipeLeft swipeRight',
+
+                handler(e) {
+
+                    if (this.isToggled() && isTouch(e) && (e.type === 'swipeLeft' && !this.flip || e.type === 'swipeRight' && this.flip)) {
+                        this.hide();
+                    }
+
+                }
             }
 
-        }
+        ]
 
     });
 

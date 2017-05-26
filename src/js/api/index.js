@@ -1,8 +1,9 @@
-import bootAPI from './boot';
 import globalAPI from './global';
-import internalAPI from './internal';
+import hooksAPI from './hooks';
+import stateAPI from './state';
 import instanceAPI from './instance';
 import componentAPI from './component';
+import classAPI from './class';
 import * as util from '../util/index';
 
 var UIkit = function (options) {
@@ -17,9 +18,10 @@ UIkit.instances = {};
 UIkit.elements = [];
 
 globalAPI(UIkit);
-internalAPI(UIkit);
+hooksAPI(UIkit);
+stateAPI(UIkit);
 instanceAPI(UIkit);
 componentAPI(UIkit);
-bootAPI(UIkit);
+classAPI(UIkit);
 
 export default UIkit;

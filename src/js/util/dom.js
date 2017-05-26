@@ -1,14 +1,15 @@
 import $ from 'jquery';
-import { animationend, each, extend, getContextSelectors, isNumber, isString, toJQuery, transitionend, requestAnimationFrame } from './index';
+import { animationend, assign, clamp, each, Event, getContextSelectors, isNumber, isString, offsetTop, promise, requestAnimationFrame, toNode, toJQuery, transitionend } from './index';
 
+var docEl = document.documentElement;
 export const win = $(window);
 export const doc = $(document);
-export const docElement = $(document.documentElement);
+export const docElement = $(docEl);
 
-export const langDirection = $('html').attr('dir') == 'rtl' ? 'right' : 'left';
+export const isRtl = docEl.getAttribute('dir') === 'rtl';
 
 export function isReady() {
-    return document.readyState === 'complete' || document.readyState !== 'loading' && !document.documentElement.doScroll;
+    return document.readyState === 'complete' || document.readyState !== 'loading' && !docEl.doScroll;
 }
 
 export function ready(fn) {
@@ -29,54 +30,59 @@ export function ready(fn) {
 }
 
 export function on(el, type, listener, useCapture) {
-    $(el)[0].addEventListener(type, listener, useCapture)
+    type.split(' ').forEach(type => toNode(el).addEventListener(type, listener, useCapture));
 }
 
 export function off(el, type, listener, useCapture) {
-    $(el)[0].removeEventListener(type, listener, useCapture)
+    type.split(' ').forEach(type => toNode(el).removeEventListener(type, listener, useCapture));
 }
 
 export function transition(element, props, duration = 400, transition = 'linear') {
 
-    var d = $.Deferred();
+    var p = promise((resolve, reject) => {
 
-    element = $(element);
+        element = $(element);
 
-    for (var name in props) {
-        element.css(name, element.css(name));
-    }
+        for (var name in props) {
+            element.css(name, element.css(name));
+        }
 
-    let timer = setTimeout(() => element.trigger(transitionend || 'transitionend'), duration);
+        let timer = setTimeout(() => element.trigger(transitionend || 'transitionend'), duration);
 
-    element
-        .one(transitionend || 'transitionend', (e, cancel) => {
-            clearTimeout(timer);
-            element.removeClass('uk-transition').css('transition', '');
-            if (!cancel) {
-                d.resolve();
-            } else {
-                d.reject();
-            }
-        })
-        .addClass('uk-transition')
-        .css('transition', `all ${duration}ms ${transition}`)
-        .css(props);
+        element
+            .one(transitionend || 'transitionend', (e, cancel) => {
 
-    return d.promise();
+                e.promise = p;
+
+                clearTimeout(timer);
+                element.removeClass('uk-transition').css('transition', '');
+                if (!cancel) {
+                    resolve();
+                } else {
+                    reject();
+                }
+            })
+            .addClass('uk-transition')
+            .css('transition', `all ${duration}ms ${transition}`)
+            .css(props);
+
+    }).then(null, () => {});
+
+    return p;
 }
 
 export const Transition = {
 
     start: transition,
 
-    stop(element) {
-        $(element).trigger(transitionend || 'transitionend');
-        return this;
+    stop(element, cancel) {
+        var e = Event(transitionend || 'transitionend');
+        $(element).triggerHandler(e, [cancel]);
+        return e.promise || promise.resolve();
     },
 
     cancel(element) {
-        $(element).trigger(transitionend || 'transitionend', [true]);
-        return this;
+        return this.stop(element, true);
     },
 
     inProgress(element) {
@@ -87,39 +93,48 @@ export const Transition = {
 
 export function animate(element, animation, duration = 200, origin, out) {
 
-    var d = $.Deferred(), cls = out ? 'uk-animation-leave' : 'uk-animation-enter';
+    var p = promise(resolve => {
 
-    element = $(element);
+        var cls = out ? 'uk-animation-leave' : 'uk-animation-enter';
 
-    if (animation.lastIndexOf('uk-animation-', 0) === 0) {
+        element = $(element);
 
-        if (origin) {
-            animation += ` uk-animation-${origin}`;
+        if (animation.lastIndexOf('uk-animation-', 0) === 0) {
+
+            if (origin) {
+                animation += ` uk-animation-${origin}`;
+            }
+
+            if (out) {
+                animation += ' uk-animation-reverse';
+            }
+
         }
 
-        if (out) {
-            animation += ' uk-animation-reverse';
+        reset();
+
+        element
+            .one(animationend || 'animationend', e => {
+                e.promise = p;
+                p.then(reset);
+                resolve();
+            })
+            .css('animation-duration', `${duration}ms`)
+            .addClass(animation)
+            .addClass(cls);
+
+
+        if (!animationend) {
+            requestAnimationFrame(() => Animation.cancel(element));
         }
 
-    }
+        function reset() {
+            element.css('animation-duration', '').removeClass(`${cls} ${animation}`);
+        }
 
-    reset();
+    });
 
-    element
-        .one(animationend || 'animationend', () => d.resolve().then(reset))
-        .css('animation-duration', `${duration}ms`)
-        .addClass(animation)
-        .addClass(cls);
-
-    if (!animationend) {
-        requestAnimationFrame(() => Animation.cancel(element));
-    }
-
-    return d.promise();
-
-    function reset() {
-        element.css('animation-duration', '').removeClass(`${cls} ${animation}`);
-    }
+    return p;
 }
 
 export const Animation = {
@@ -137,15 +152,24 @@ export const Animation = {
     },
 
     cancel(element) {
-        $(element).trigger(animationend || 'animationend');
-        return $.Deferred().resolve();
+        var e = Event(animationend || 'animationend');
+        $(element).triggerHandler(e);
+        return e.promise || promise.resolve();
     }
 
 };
 
+export function isJQuery(obj) {
+    return obj instanceof $;
+}
+
 export function isWithin(element, selector) {
     element = $(element);
-    return element.is(selector) || !!(isString(selector) ? element.parents(selector).length : $.contains(selector instanceof $ ? selector[0] : selector, element[0]));
+    return element.is(selector)
+        ? true
+        : isString(selector)
+            ? element.parents(selector).length
+            : toNode(selector).contains(element[0]);
 }
 
 export function attrFilter(element, attr, pattern, replacement) {
@@ -165,7 +189,7 @@ export function createEvent(e, bubbles = true, cancelable = false, data = false)
     }
 
     if (data) {
-        $.extend(e, data);
+        assign(e, data);
     }
 
     return e;
@@ -173,18 +197,27 @@ export function createEvent(e, bubbles = true, cancelable = false, data = false)
 
 export function isInView(element, offsetTop = 0, offsetLeft = 0) {
 
-    element = $(element);
+    var rect = toNode(element).getBoundingClientRect();
 
-    if (!element.is(':visible')) {
-        return false;
-    }
+    return rect.bottom >= -1 * offsetTop
+        && rect.right >= -1 * offsetLeft
+        && rect.top <= window.innerHeight + offsetTop
+        && rect.left <= window.innerWidth + offsetLeft;
+}
 
-    var scrollLeft = win.scrollLeft(), scrollTop = win.scrollTop(), {top, left} = element.offset();
+export function scrolledOver(element) {
 
-    return top + element.height() >= scrollTop
-        && top - offsetTop <= scrollTop + win.height()
-        && left + element.width() >= scrollLeft
-        && left - offsetLeft <= scrollLeft + win.width();
+    var {top, height} = toNode(element).getBoundingClientRect(),
+        topOffset = offsetTop(element),
+        vp = window.innerHeight,
+        vh = vp + Math.min(0, topOffset - vp),
+        diff = Math.max(0, vp - (docHeight() - (topOffset + height)));
+
+    return clamp(((vh - top) / ((vh + (height - (diff < vp ? diff : 0)) ) / 100)) / 100);
+}
+
+export function docHeight() {
+    return Math.max(docEl.offsetHeight, docEl.scrollHeight);
 }
 
 export function getIndex(index, elements, current = 0) {
@@ -226,8 +259,7 @@ var voidElements = {
     wbr: true
 };
 export function isVoidElement(element) {
-    element = $(element);
-    return voidElements[element[0].tagName.toLowerCase()];
+    return voidElements[toNode(element).tagName.toLowerCase()];
 }
 
 export const Dimensions = {
@@ -242,8 +274,8 @@ export const Dimensions = {
         };
     },
 
-    fit(dimensions, maxDimensions) {
-        dimensions = extend({}, dimensions);
+    contain(dimensions, maxDimensions) {
+        dimensions = assign({}, dimensions);
 
         each(dimensions, prop => dimensions = dimensions[prop] > maxDimensions[prop] ? this.ratio(dimensions, prop, maxDimensions[prop]) : dimensions);
 
@@ -251,7 +283,7 @@ export const Dimensions = {
     },
 
     cover(dimensions, maxDimensions) {
-        dimensions = this.fit(dimensions, maxDimensions);
+        dimensions = this.contain(dimensions, maxDimensions);
 
         each(dimensions, prop => dimensions = dimensions[prop] < maxDimensions[prop] ? this.ratio(dimensions, prop, maxDimensions[prop]) : dimensions);
 

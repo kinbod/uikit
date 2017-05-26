@@ -1,4 +1,4 @@
-import { $, ready } from '../util/index';
+import { $, createEvent } from '../util/index';
 
 export default function (UIkit) {
 
@@ -10,62 +10,66 @@ export default function (UIkit) {
 
         if (!el[DATA]) {
             el[DATA] = {};
-            UIkit.elements.push(el);
         }
 
         if (el[DATA][name]) {
-            console.warn(`Component "${name}" is already mounted on element: `, el);
             return;
         }
 
         el[DATA][name] = this;
 
+        this.$options.el = this.$options.el || el;
         this.$el = $(el);
 
         this._initProps();
 
         this._callHook('init');
 
-        this._initEvents();
-
-        if (document.documentElement.contains(this.$el[0])) {
-            this._callHook('connected');
+        if (document.documentElement.contains(el)) {
+            this._callConnected();
         }
-
-        ready(() => this._callReady());
-
     };
 
     UIkit.prototype.$emit = function (e) {
         this._callUpdate(e);
     };
 
+    UIkit.prototype.$emitSync = function (e) {
+        this._callUpdate(createEvent(e || 'update', true, false, {sync: true}));
+    };
+
     UIkit.prototype.$update = function (e, parents) {
-        UIkit.update(e, this.$el, parents);
+        UIkit.update(e, this.$options.el, parents);
+    };
+
+    UIkit.prototype.$updateSync = function (e, parents) {
+        this.$update(createEvent(e || 'update', true, false, {sync: true}), parents);
+    };
+
+    UIkit.prototype.$reset = function (data) {
+        this._callDisconnected();
+        this._initProps(data);
+        this._callConnected();
     };
 
     UIkit.prototype.$destroy = function (remove = false) {
 
+        var {el, name} = this.$options;
+
+        if (el) {
+            this._callDisconnected();
+        }
+
         this._callHook('destroy');
-
-        delete UIkit.instances[this._uid];
-
-        var el = this.$options.el;
 
         if (!el || !el[DATA]) {
             return;
         }
 
-        delete el[DATA][this.$options.name];
+        delete el[DATA][name];
 
         if (!Object.keys(el[DATA]).length) {
             delete el[DATA];
-
-            var index = UIkit.elements.indexOf(el);
-
-            if (~index) {
-                UIkit.elements.splice(index, 1);
-            }
         }
 
         if (remove) {

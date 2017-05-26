@@ -1,54 +1,28 @@
+import { classify, promise, toNode } from './lang';
+
 export const Observer = window.MutationObserver || window.WebKitMutationObserver;
 export const requestAnimationFrame = window.requestAnimationFrame || function (fn) { return setTimeout(fn, 1000 / 60); };
-export const cancelAnimationFrame = window.cancelAnimationFrame || window.clearTimeout;
 
+var hasTouchEvents = 'ontouchstart' in window;
+var hasPointerEvents = window.PointerEvent;
+export const hasPromise = 'Promise' in window;
 export const hasTouch = 'ontouchstart' in window
     || window.DocumentTouch && document instanceof DocumentTouch
-    || navigator.msPointerEnabled && navigator.msMaxTouchPoints > 0 // IE 10
-    || navigator.pointerEnabled && navigator.maxTouchPoints > 0; // IE >=11
+    || navigator.msPointerEnabled && navigator.msMaxTouchPoints // IE 10
+    || navigator.pointerEnabled && navigator.maxTouchPoints; // IE >=11
 
-export const pointerDown = !hasTouch ? 'mousedown' : window.PointerEvent ? 'pointerdown' : 'touchstart';
-export const pointerMove = !hasTouch ? 'mousemove' : window.PointerEvent ? 'pointermove' : 'touchmove';
-export const pointerUp = !hasTouch ? 'mouseup' : window.PointerEvent ? 'pointerup' : 'touchend';
+export const pointerDown = !hasTouch ? 'mousedown' : `mousedown ${hasTouchEvents ? 'touchstart' : 'pointerdown'}`;
+export const pointerMove = !hasTouch ? 'mousemove' : `mousemove ${hasTouchEvents ? 'touchmove' : 'pointermove'}`;
+export const pointerUp = !hasTouch ? 'mouseup' :  `mouseup ${hasTouchEvents ? 'touchend' : 'pointerup'}`;
+export const pointerEnter = hasTouch && hasPointerEvents ? 'pointerenter' : 'mouseenter';
+export const pointerLeave = hasTouch && hasPointerEvents ? 'pointerleave' : 'mouseleave';
 
-export const transitionend = (function () {
-
-    var element = document.body || document.documentElement,
-        names = {
-            WebkitTransition: 'webkitTransitionEnd',
-            MozTransition: 'transitionend',
-            OTransition: 'oTransitionEnd otransitionend',
-            transition: 'transitionend'
-        }, name;
-
-    for (name in names) {
-        if (element.style[name] !== undefined) {
-            return names[name];
-        }
-    }
-
-})();
-
-export const animationend = (function () {
-
-    var element = document.body || document.documentElement,
-        names = {
-            WebkitAnimation: 'webkitAnimationEnd',
-            MozAnimation: 'animationend',
-            OAnimation: 'oAnimationEnd oanimationend',
-            animation: 'animationend'
-        }, name;
-
-    for (name in names) {
-        if (element.style[name] !== undefined) {
-            return names[name];
-        }
-    }
-
-})();
+export const transitionend = prefix('transition', 'transition-end');
+export const animationstart = prefix('animation', 'animation-start');
+export const animationend = prefix('animation', 'animation-end');
 
 export function getStyle(element, property, pseudoElt) {
-    return (window.getComputedStyle(element, pseudoElt) || {})[property];
+    return (window.getComputedStyle(toNode(element), pseudoElt) || {})[property];
 }
 
 export function getCssVar(name) {
@@ -70,4 +44,37 @@ export function getCssVar(name) {
     doc.removeChild(element);
 
     return val || undefined;
+}
+
+export function getImage(src) {
+
+    return promise((resolve, reject) => {
+        var img = new Image();
+
+        img.onerror = reject;
+        img.onload = () => resolve(img);
+
+        img.src = src;
+    });
+
+}
+
+function prefix(name, event) {
+
+    var ucase = classify(name),
+        lowered = classify(event).toLowerCase(),
+        classified = classify(event),
+        element = document.body || document.documentElement,
+        names = {
+            [`Webkit${ucase}`]: `webkit${classified}`,
+            [`Moz${ucase}`]: lowered,
+            [`o${ucase}`]: `o${classified} o${lowered}`,
+            [name]: lowered
+        };
+
+    for (name in names) {
+        if (element.style[name] !== undefined) {
+            return names[name];
+        }
+    }
 }

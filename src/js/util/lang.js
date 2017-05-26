@@ -1,8 +1,8 @@
-import $ from 'jquery';
-import { getCssVar, query } from './index';
+import $, { isNumeric } from 'jquery';
+import { getCssVar, hasPromise, isJQuery, query } from './index';
 
 export { $ };
-export { ajax, each, extend, map, merge, isArray, isNumeric, isFunction, isPlainObject } from 'jquery';
+export { ajax, each, Event, isNumeric } from 'jquery';
 
 export function bind(fn, context) {
     return function (a) {
@@ -16,6 +16,37 @@ export function hasOwn(obj, key) {
     return hasOwnProperty.call(obj, key);
 }
 
+export function promise(executor) {
+
+    if (hasPromise) {
+        return new Promise(executor);
+    }
+
+    var def = $.Deferred();
+
+    executor(def.resolve, def.reject);
+
+    return def;
+}
+
+promise.resolve = function (value) {
+    return promise(function (resolve) {
+        resolve(value);
+    });
+};
+
+promise.reject = function (value) {
+    return promise(function (_, reject) {
+        reject(value);
+    });
+};
+
+promise.all = function (iterable) {
+    return hasPromise
+        ? Promise.all(iterable)
+        : $.when.apply($, iterable);
+};
+
 export function classify(str) {
     return str.replace(/(?:^|[-_\/])(\w)/g, (_, c) => c ? c.toUpperCase() : '');
 }
@@ -26,13 +57,27 @@ export function hyphenate(str) {
         .toLowerCase()
 }
 
-var camelizeRE = /-(\w)/g;
+const camelizeRE = /-(\w)/g;
 export function camelize(str) {
     return str.replace(camelizeRE, toUpper)
 }
 
 function toUpper(_, c) {
     return c ? c.toUpperCase() : ''
+}
+
+export const isArray = Array.isArray;
+
+export function isFunction(obj) {
+    return typeof obj === 'function';
+}
+
+export function isObject(obj) {
+    return obj !== null && typeof obj === 'object';
+}
+
+export function isPlainObject(obj) {
+    return isObject(obj) && Object.getPrototypeOf(obj) === Object.prototype;
 }
 
 export function isString(value) {
@@ -48,14 +93,14 @@ export function isUndefined(value) {
 }
 
 export function isContextSelector(selector) {
-    return isString(selector) && selector.match(/^(!|>|\+|-)/);
+    return isString(selector) && selector.match(/^[!>+-]/);
 }
 
 export function getContextSelectors(selector) {
-    return isContextSelector(selector) && selector.split(/(?=\s(?:!|>|\+|-))/g).map(value => value.trim());
+    return isContextSelector(selector) && selector.split(/(?=\s[!>+-])/g).map(value => value.trim());
 }
 
-var contextSelectors = {'!': 'closest', '+': 'nextAll', '-': 'prevAll'};
+const contextSelectors = {'!': 'closest', '+': 'nextAll', '-': 'prevAll'};
 export function toJQuery(element, context) {
 
     if (element === true) {
@@ -65,7 +110,18 @@ export function toJQuery(element, context) {
     try {
 
         if (context && isContextSelector(element) && element[0] !== '>') {
-            element = $(context)[contextSelectors[element[0]]](element.substr(1));
+
+            var fn = contextSelectors[element[0]], selector = element.substr(1);
+
+            context = $(context);
+
+            if (fn === 'closest') {
+                context = context.parent();
+                selector = selector || '*';
+            }
+
+            element = context[fn](selector);
+
         } else {
             element = $(element, context);
         }
@@ -77,12 +133,16 @@ export function toJQuery(element, context) {
     return element.length ? element : null;
 }
 
+export function toNode(element) {
+    return element && (isJQuery(element) ? element[0] : element);
+}
+
 export function toBoolean(value) {
     return typeof value === 'boolean'
         ? value
-        : value === 'true' || value == '1' || value === ''
+        : value === 'true' || value === '1' || value === ''
             ? true
-            : value === 'false' || value == '0'
+            : value === 'false' || value === '0'
                 ? false
                 : value;
 }
@@ -92,11 +152,26 @@ export function toNumber(value) {
     return !isNaN(number) ? number : false;
 }
 
+export function toList(value) {
+    return isArray(value)
+        ? value
+        : isString(value)
+            ? value.split(',').map(value => isNumeric(value)
+                ? toNumber(value)
+                : toBoolean(value.trim()))
+            : [value];
+}
+
 var vars = {};
 export function toMedia(value) {
-    if (isString(value) && value[0] == '@') {
-        var name = `media-${value.substr(1)}`;
-        value = vars[name] || (vars[name] = parseFloat(getCssVar(name)));
+
+    if (isString(value)) {
+        if (value[0] === '@') {
+            var name = `media-${value.substr(1)}`;
+            value = vars[name] || (vars[name] = parseFloat(getCssVar(name)));
+        } else if (value.match(/^\(min-width:/)) {
+            return value;
+        }
     }
 
     return value && !isNaN(value) ? `(min-width: ${value}px)` : false;
@@ -110,9 +185,44 @@ export function coerce(type, value, context) {
         return toNumber(value);
     } else if (type === 'jQuery') {
         return query(value, context);
+    } else if (type === 'list') {
+        return toList(value);
     } else if (type === 'media') {
         return toMedia(value);
     }
 
     return type ? type(value) : value;
+}
+
+export function toMs(time) {
+    return !time
+        ? 0
+        : time.substr(-2) === 'ms'
+            ? parseFloat(time)
+            : parseFloat(time) * 1000;
+}
+
+export function swap(value, a, b) {
+    return value.replace(new RegExp(`${a}|${b}`, 'mg'), function (match) {
+        return match === a ? b : a
+    });
+}
+
+export const assign = Object.assign || function (target, ...args) {
+    target = Object(target);
+    for (var i = 0; i < args.length; i++) {
+        var source = args[i];
+        if (source !== null) {
+            for (var key in source) {
+                if (hasOwn(source, key)) {
+                    target[key] = source[key];
+                }
+            }
+        }
+    }
+    return target;
+};
+
+export function clamp(number, min = 0, max = 1) {
+    return Math.min(Math.max(number, min), max);
 }

@@ -1,3 +1,5 @@
+import { isNumeric, isString, offsetTop, query } from '../util/index';
+
 export default function (UIkit) {
 
     UIkit.component('height-viewport', {
@@ -14,13 +16,11 @@ export default function (UIkit) {
             offsetBottom: false
         },
 
-        init() {
-            this.$emit();
-        },
-
         update: {
 
             write() {
+
+                this.$el.css('boxSizing', 'border-box');
 
                 var viewport = window.innerHeight, height, offset = 0;
 
@@ -36,17 +36,28 @@ export default function (UIkit) {
 
                 } else {
 
-                    var top = this.$el[0].offsetTop;
+                    var top = offsetTop(this.$el);
 
-                    if (top < viewport) {
+                    if (top < viewport && this.offsetTop) {
+                        offset += top;
+                    }
 
-                        if (this.offsetTop) {
-                            offset += top;
-                        }
+                    if (this.offsetBottom === true) {
 
-                        if (this.offsetBottom) {
-                            offset += this.$el.next().outerHeight() || 0;
-                        }
+                        offset += this.$el.next().outerHeight() || 0;
+
+                    } else if (isNumeric(this.offsetBottom)) {
+
+                        offset += (viewport / 100) * this.offsetBottom;
+
+                    } else if (this.offsetBottom && this.offsetBottom.substr(-2) === 'px') {
+
+                        offset += parseFloat(this.offsetBottom);
+
+                    } else if (isString(this.offsetBottom)) {
+
+                        var el = query(this.offsetBottom, this.$el);
+                        offset += el && el.outerHeight() || 0;
 
                     }
 
@@ -55,14 +66,14 @@ export default function (UIkit) {
                 }
 
                 // IE 10-11 fix (min-height on a flex container won't apply to its flex items)
-                this.$el.css('height', '');
+                this.$el.height('');
                 if (height && viewport - offset >= this.$el.outerHeight()) {
                     this.$el.css('height', height);
                 }
 
             },
 
-            events: ['load', 'resize', 'orientationchange']
+            events: ['load', 'resize']
 
         }
 

@@ -1,16 +1,16 @@
-import { Toggable } from '../mixin/index';
-import { $, getIndex, toJQuery } from '../util/index';
+import { Togglable } from '../mixin/index';
+import { $, getIndex, isTouch, toJQuery, query } from '../util/index';
 
 export default function (UIkit) {
 
     UIkit.component('switcher', {
 
-        mixins: [Toggable],
+        mixins: [Togglable],
 
         args: 'connect',
 
         props: {
-            connect: 'jQuery',
+            connect: String,
             toggle: String,
             active: Number,
             swiping: Boolean
@@ -27,36 +27,80 @@ export default function (UIkit) {
             queued: true
         },
 
-        ready() {
+        computed: {
 
-            this.$el.on('click', `${this.toggle}:not(.uk-disabled)`, e => {
-                e.preventDefault();
-                this.show(e.currentTarget);
-            });
+            connects() {
+                return query(this.connect, this.$el) || $(this.$el.next(`.${this.clsContainer}`));
+            },
+
+            toggles() {
+                return $(this.toggle, this.$el);
+            }
 
         },
 
-        update() {
+        events: [
 
-            this.toggles = $(this.toggle, this.$el);
-            this.connects = this.connect || $(this.$el.next(`.${this.clsContainer}`));
+            {
 
-            this.connects.off('click', `[${this.attrItem}]`).on('click', `[${this.attrItem}]`, e => {
-                e.preventDefault();
-                this.show($(e.currentTarget).attr(this.attrItem));
-            });
+                name: 'click',
 
-            if (this.swiping) {
-                this.connects.off('swipeRight swipeLeft').on('swipeRight swipeLeft', e => {
+                delegate() {
+                    return `${this.toggle}:not(.uk-disabled)`;
+                },
+
+                handler(e) {
+                    e.preventDefault();
+                    this.show(e.currentTarget);
+                }
+
+            },
+
+            {
+                name: 'click',
+
+                el() {
+                    return this.connects;
+                },
+
+                delegate() {
+                    return `[${this.attrItem}],[data-${this.attrItem}]`;
+                },
+
+                handler(e) {
+                    e.preventDefault();
+                    this.show($(e.currentTarget)[e.currentTarget.hasAttribute(this.attrItem) ? 'attr' : 'data'](this.attrItem));
+                }
+            },
+
+            {
+                name: 'swipeRight swipeLeft',
+
+                filter() {
+                    return this.swiping;
+                },
+
+                el() {
+                    return this.connects;
+                },
+
+                handler(e) {
+                    if (!isTouch(e)) {
+                        return;
+                    }
+
                     e.preventDefault();
                     if (!window.getSelection().toString()) {
-                        this.show(e.type == 'swipeLeft' ? 'next' : 'previous');
+                        this.show(e.type === 'swipeLeft' ? 'next' : 'previous');
                     }
-                });
+                }
             }
 
-            this.updateAria(this.connects.children());
+        ],
 
+        update() {
+
+            this.updateAria(this.connects.children());
             this.show(toJQuery(this.toggles.filter(`.${this.cls}:first`)) || toJQuery(this.toggles.eq(this.active)) || this.toggles.first());
 
         },
