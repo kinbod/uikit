@@ -18,24 +18,6 @@ export default function (UIkit) {
             selClose: '.uk-modal-close, .uk-modal-close-default, .uk-modal-close-outside, .uk-modal-close-full'
         },
 
-        update: {
-
-            write() {
-
-                if (this.$el.css('display') === 'block' && this.center) {
-                    this.$el
-                        .removeClass('uk-flex uk-flex-center uk-flex-middle')
-                        .css('display', 'block')
-                        .toggleClass('uk-flex uk-flex-center uk-flex-middle', window.innerHeight > this.panel.outerHeight(true))
-                        .css('display', this.$el.hasClass('uk-flex') ? '' : 'block');
-                }
-
-            },
-
-            events: ['resize']
-
-        },
-
         events: [
 
             {
@@ -44,7 +26,13 @@ export default function (UIkit) {
                 self: true,
 
                 handler() {
-                    this.$el.css('display', 'block').height();
+
+                    if (this.panel.hasClass('uk-margin-auto-vertical')) {
+                        this.$el.addClass('uk-flex').height();
+                    } else {
+                        this.$el.css('display', 'block').height();
+                    }
+
                 }
             },
 
@@ -54,7 +42,9 @@ export default function (UIkit) {
                 self: true,
 
                 handler() {
-                    this.$el.css('display', '').removeClass('uk-flex uk-flex-center uk-flex-middle');
+
+                    this.$el.css('display', '').removeClass('uk-flex');
+
                 }
             }
 
@@ -67,6 +57,10 @@ export default function (UIkit) {
         mixins: [Class],
 
         computed: {
+
+            modal() {
+                return this.$el.closest('.uk-modal');
+            },
 
             panel() {
                 return this.$el.closest('.uk-modal-dialog');
@@ -82,7 +76,8 @@ export default function (UIkit) {
 
             write() {
                 var current = this.$el.css('max-height');
-                this.$el.css('max-height', 150).css('max-height', Math.max(150, 150 - (this.panel.outerHeight(true) - window.innerHeight)));
+
+                this.$el.css('max-height', 150).css('max-height', Math.max(150, 150 + this.modal.height() - this.panel.outerHeight(true)));
                 if (current !== this.$el.css('max-height')) {
                     this.$el.trigger('resize');
                 }

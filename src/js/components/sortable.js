@@ -5,7 +5,7 @@ function plugin(UIkit) {
     }
 
     var { mixin, util } = UIkit;
-    var {$, assign, docElement: doc, docHeight, getDimensions, isWithin, on, off, offsetTop, pointerDown, pointerMove, pointerUp, promise, win} = util;
+    var {$, assign, docElement: doc, docHeight, fastdom, getDimensions, isWithin, offsetTop, pointerDown, pointerMove, pointerUp, preventClick, promise, win} = util;
 
     UIkit.component('sortable', {
 
@@ -43,12 +43,12 @@ function plugin(UIkit) {
 
         init() {
             ['init', 'start', 'move', 'end'].forEach(key => {
-                let fn = this[key];
+                var fn = this[key];
                 this[key] = e => {
                     e = e.originalEvent || e;
                     this.scrollY = window.scrollY;
-                    var {pageX, pageY} = e.touches && e.touches[0] || e;
-                    this.pos = {x: pageX, y: pageY};
+                    var {pageX: x, pageY: y} = e.touches && e.touches[0] || e;
+                    this.pos = {x, y};
 
                     fn(e);
                 }
@@ -294,7 +294,8 @@ function plugin(UIkit) {
 
                 children.forEach(el => el.stop());
                 this.$el.children().css(reset);
-                this.$updateSync('update', true);
+                this.$update('update', true);
+                fastdom.flush();
 
                 this.$el.css('min-height', this.$el.height());
 
@@ -302,7 +303,8 @@ function plugin(UIkit) {
                 promise.all(children.map((el, i) => el.css(props[i]).animate(positions[i], this.animation).promise()))
                     .then(() => {
                         this.$el.css('min-height', '').children().css(reset);
-                        this.$updateSync('update', true);
+                        this.$update('update', true);
+                        fastdom.flush();
                     });
 
             }
@@ -313,20 +315,6 @@ function plugin(UIkit) {
 
     function getSortable(element) {
         return UIkit.getComponent(element, 'sortable') || element.parentNode && getSortable(element.parentNode);
-    }
-
-    function preventClick() {
-        var timer = setTimeout(() => doc.trigger('click'), 0),
-            listener = e => {
-
-                e.preventDefault();
-                e.stopPropagation();
-
-                clearTimeout(timer);
-                off(doc, 'click', listener, true);
-            };
-
-        on(doc, 'click', listener, true);
     }
 
 }

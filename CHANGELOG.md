@@ -4,16 +4,48 @@
 
 ### Added
 
+- Add Lightbox component
+- Add Video component
+
+### Changed
+
+- IMPORTANT: Remove caption from Modal component. Use Lightbox component instead
+- IMPORTANT: Remove lightbox modifier from Modal component. Use Lightbox component instead
+- IMPORTANT: Remove center option from Modal component. Use `uk-margin-auto-vertical` modifier
+- IMPORTANT: Renamed `@modal-dialog-margin-vertical` to `@modal-padding-vertical-s`
+- IMPORTANT: Renamed `@modal-dialog-margin-vertical-xs` to `@modal-padding-vertical`
+- Refactored Modal component
+- `offsetTop` in Height Viewport component only applies if its element's top position is smaller than half the viewport
+- Larger width for form width x-small
+
+### Fixed
+
+- Offcanvas will keep scroll position if anchor link was clicked
+
+## 3.0.0 beta 25 (June 9, 2017)
+
+### Added
+
+- Add size modifier to tile component
 - Add link text to link component
+- Add 500px icon
 
 ### Changed
 
 - Larger horizontal padding for form input, select and textarea
 - Improve Parallax Background Position behaviour
 
+### Removed
+
+- Remove padding xlarge from padding component
+
 ### Fixed
 
 - Fix touch event handling
+- Fix cursor height for active forms in Safari
+- Fix Grid and Margin component for cells with no height
+- Fix Parallax if element is translated vertical
+- Fix Grid divider in rtl mode
 
 ## 3.0.0 beta 24 (May 22, 2017)
 

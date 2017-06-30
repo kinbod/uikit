@@ -1,4 +1,4 @@
-import { animationstart, getStyle, on, toMs } from '../util/index';
+import { animationstart, fastdom, getStyle, on, toMs } from '../util/index';
 
 import Accordion from './accordion';
 import Alert from './alert';
@@ -27,6 +27,7 @@ import Switcher from './switcher';
 import Tab from './tab';
 import Toggle from './toggle';
 import Leader from './leader';
+import Video from './video';
 
 export default function (UIkit) {
 
@@ -37,6 +38,7 @@ export default function (UIkit) {
         e.dir = scroll < window.pageYOffset ? 'down' : 'up';
         scroll = window.pageYOffset;
         UIkit.update(e);
+        fastdom.flush();
     });
 
     on(document, animationstart, ({target}) => {
@@ -55,6 +57,7 @@ export default function (UIkit) {
     UIkit.use(Toggle);
     UIkit.use(Accordion);
     UIkit.use(Alert);
+    UIkit.use(Video);
     UIkit.use(Cover);
     UIkit.use(Drop);
     UIkit.use(Dropdown);

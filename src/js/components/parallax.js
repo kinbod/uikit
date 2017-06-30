@@ -53,12 +53,12 @@ function plugin(UIkit) {
                     }
 
                     var start = (!isUndefined(values[1])
-                                ? values[0]
-                                : prop === 'scale'
-                                    ? 1
-                                    : isCssProp
-                                        ? this.$el.css(prop)
-                                        : 0) || 0,
+                            ? values[0]
+                            : prop === 'scale'
+                                ? 1
+                                : isCssProp
+                                    ? this.$el.css(prop)
+                                    : 0) || 0,
                         end = isUndefined(values[1]) ? values[0] : values[1],
                         unit = ~values.join('').indexOf('%') ? '%' : 'px',
                         diff;
@@ -109,8 +109,8 @@ function plugin(UIkit) {
         },
 
         disconnected() {
-            this._prev = undefined;
-            this._image = undefined;
+            delete this._prev;
+            delete this._image;
         },
 
         update: [
@@ -119,7 +119,10 @@ function plugin(UIkit) {
 
                 read() {
 
-                    this._prev = undefined;
+                    delete this._prev;
+                    delete this._computeds.props;
+
+                    this._active = !this.media || window.matchMedia(this.media).matches;
 
                     if (this._image) {
                         this._image.dimEl = {
@@ -128,10 +131,7 @@ function plugin(UIkit) {
                         }
                     }
 
-                    if (!isUndefined(this._image) || !this.covers || !this.bgProps.some(prop => {
-                            var {start, end, pos} = this.props[prop];
-                            return start >= end && pos.match(/%$/);
-                        })) {
+                    if (!isUndefined(this._image) || !this.covers || !this.bgProps.length) {
                         return;
                     }
 
@@ -160,7 +160,7 @@ function plugin(UIkit) {
                         return;
                     }
 
-                    if (this.media && !window.matchMedia(this.media).matches) {
+                    if (!this._active) {
                         this.$el.css({backgroundSize: '', backgroundRepeat: ''});
                         return;
                     }
@@ -171,17 +171,35 @@ function plugin(UIkit) {
 
                     this.bgProps.forEach(prop => {
 
-                        var {pos, diff} = this.props[prop],
+                        var {start, end, pos, diff} = this.props[prop],
                             attr = prop === 'bgy' ? 'height' : 'width',
                             span = dim[attr] - dimEl[attr];
 
-                        if (span < diff) {
-                            dimEl[attr] = dim[attr] + diff - span;
-                            this.props[prop].pos = '0px';
+                        if (!pos.match(/%$/)) {
+                            return;
+                        }
+
+                        if (start >= end) {
+
+                            if (span < diff) {
+                                dimEl[attr] = dim[attr] + diff - span;
+                                this.props[prop].pos = '0px';
+                            } else {
+                                pos = -1 * span / 100 * parseFloat(pos);
+                                pos = clamp(pos, diff - span, 0);
+                                this.props[prop].pos = `${pos}px`;
+                            }
+
                         } else {
-                            pos = -1 * span / 100 * parseFloat(pos);
-                            pos = clamp(pos, diff - span, 0);
-                            this.props[prop].pos = `${pos}px`;
+
+                            if (span < diff) {
+                                dimEl[attr] = dim[attr] + diff - span;
+                            } else if ((span / 100 * parseFloat(pos)) > diff) {
+                                return;
+                            }
+
+                            this.props[prop].pos = `-${diff}px`;
+
                         }
 
                         dim = Dimensions.cover(image, dimEl);
@@ -200,23 +218,24 @@ function plugin(UIkit) {
 
             {
 
+                read() {
+
+                    var percent = scrolledOver(this.target) / (this.viewport || 1);
+                    this._percent = clamp(percent * (1 - (this.easing - this.easing * percent)));
+
+                },
+
                 write() {
 
-                    if (this.media && !window.matchMedia(this.media).matches) {
+                    if (!this._active) {
                         Object.keys(getCss(this.props, 0)).forEach(prop => this.$el.css(prop, ''));
                         return;
                     }
 
-                    var percent = scrolledOver(this.target) / (this.viewport || 1);
-
-                    percent = clamp(percent * (1 - (this.easing - this.easing * percent)));
-
-                    if (this._prev === percent) {
-                        return;
+                    if (this._prev !== this._percent) {
+                        this.$el.css(getCss(this.props, this._percent));
+                        this._prev = this._percent;
                     }
-
-                    this.$el.css(getCss(this.props, percent));
-                    this._prev = percent;
 
                 },
 
@@ -231,19 +250,29 @@ function plugin(UIkit) {
 
     function getCss(props, percent) {
 
+        var translated = false;
         return Object.keys(props).reduce((css, prop) => {
 
             var values = props[prop],
-                value = !isUndefined(values.diff)
-                    ? values.start + values.diff * percent * (values.start < values.end ? 1 : -1)
-                    : values.end;
+                value = getValue(values, percent);
 
             switch (prop) {
 
                 // transforms
                 case 'x':
                 case 'y':
-                    css.transform += ` translate${prop}(${value + values.unit})`;
+                    if (translated) {
+                        break;
+                    }
+
+                    var [x, y] = ['x', 'y'].map(dir => prop === dir
+                        ? value + values.unit
+                        : props[dir]
+                            ? getValue(props[dir], percent) + props[dir].unit
+                            : 0
+                    );
+
+                    translated = css.transform += ` translate3d(${x}, ${y}, 0)`;
                     break;
                 case 'rotate':
                     css.transform += ` rotate(${value}deg)`;
@@ -295,6 +324,12 @@ function plugin(UIkit) {
 
         }, {transform: '', filter: ''});
 
+    }
+
+    function getValue(prop, percent) {
+        return +(!isUndefined(prop.diff)
+            ? prop.start + prop.diff * percent * (prop.start < prop.end ? 1 : -1)
+            : +prop.end).toFixed(2);
     }
 
 }
